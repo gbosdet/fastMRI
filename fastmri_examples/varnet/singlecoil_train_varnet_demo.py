@@ -14,7 +14,8 @@ from fastmri.data.mri_data import fetch_dir
 from fastmri.data.subsample import create_mask_for_mask_type
 from fastmri.data.transforms import VarNetDataTransform
 from fastmri.pl_modules import FastMriDataModule
-from fastmri.pl_modules import SSVarNetModule as VarNetModule
+# from fastmri.pl_modules import SSVarNetModule as VarNetModule
+from fastmri.pl_modules import VarNetModule
 
 
 def cli_main(args):
