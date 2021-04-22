@@ -11,7 +11,8 @@ from argparse import ArgumentParser
 
 import pytorch_lightning as pl
 from fastmri.data.mri_data import fetch_dir
-from fastmri.data.subsample import create_mask_for_mask_type
+# from fastmri.data.subsample import create_mask_for_mask_type
+from banding_removal.fastmri.common.subsample import mask_factory
 from fastmri.data.transforms import VarNetDataTransform
 from fastmri.pl_modules import FastMriDataModule
 # from fastmri.pl_modules import SSVarNetModule as VarNetModule
@@ -25,7 +26,10 @@ def cli_main(args):
     # data
     # ------------
     # this creates a k-space mask for transforming input data
-    mask = create_mask_for_mask_type(
+    # mask = create_mask_for_mask_type(
+    #     args.mask_type, args.center_fractions, args.accelerations
+    # )
+    mask = mask_factory(
         args.mask_type, args.center_fractions, args.accelerations
     )
     # use random masks for train transform, fixed masks for val transform
@@ -44,7 +48,8 @@ def cli_main(args):
         sample_rate=args.sample_rate,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
-        distributed_sampler=(args.accelerator in ("ddp", "ddp_cpu")),
+        #distributed_sampler=(args.accelerator in ("ddp", "ddp_cpu")),
+
     )
 
     # ------------
@@ -82,7 +87,8 @@ def build_args():
     # basic args
     path_config = pathlib.Path("../../fastmri_dirs.yaml")
     backend = "dp"
-    num_gpus = 2 if backend == "ddp" else 1
+    #Switch to else 1 for Collab version
+    num_gpus = 2 if backend == "ddp" else 0
     if backend is None:
         num_gpus = None
     batch_size = 1
@@ -103,7 +109,7 @@ def build_args():
     # data transform params
     parser.add_argument(
         "--mask_type",
-        choices=("random", "equispaced"),
+        choices=("random", "random_fraction", "equispaced", "magic", "magic_fraction", "equispaced_v2", "equispaced_fraction", "magic_v2"),
         default="equispaced",
         type=str,
         help="Type of k-space mask",
@@ -151,7 +157,7 @@ def build_args():
     parser.set_defaults(
         gpus=num_gpus,  # number of gpus to use
         replace_sampler_ddp=False,  # this is necessary for volume dispatch during val
-        accelerator=backend,  # what distributed version to use
+       # accelerator=backend,  # what distributed version to use
         seed=42,  # random seed
         deterministic=True,  # makes things slower, but deterministic
         default_root_dir=default_root_dir,  # directory for logs and checkpoints
