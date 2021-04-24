@@ -11,7 +11,7 @@ from argparse import ArgumentParser
 
 import pytorch_lightning as pl
 from fastmri.data.mri_data import fetch_dir
-from fastmri.data.subsample import create_mask_for_mask_type
+from banding_removal.fastmri.common.subsample import mask_factory
 from fastmri.data.transforms import VarNetDataTransform
 from fastmri.pl_modules import FastMriDataModule
 # from fastmri.pl_modules import SSVarNetModule as VarNetModule
@@ -25,7 +25,7 @@ def cli_main(args):
     # data
     # ------------
     # this creates a k-space mask for transforming input data
-    mask = create_mask_for_mask_type(
+    mask = mask_factory(
         args.mask_type, args.center_fractions, args.accelerations
     )
     # use random masks for train transform, fixed masks for val transform
@@ -103,8 +103,8 @@ def build_args():
     # data transform params
     parser.add_argument(
         "--mask_type",
-        choices=("random", "equispaced"),
-        default="equispaced",
+        choices=("random", "random_fraction", "equispaced", "magic", "magic_fraction", "equispaced_v2", "equispaced_fraction", "magic_v2"),
+        default="magic",
         type=str,
         help="Type of k-space mask",
     )

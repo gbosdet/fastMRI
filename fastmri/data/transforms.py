@@ -73,10 +73,10 @@ def apply_mask(
     """
     shape = np.array(data.shape)
     shape[:-3] = 1
-    mask = mask_func(shape, seed)
+    mask, _ = mask_func(shape, seed)
     if padding is not None:
-        mask[..., : padding[0], 0] = 0
-        mask[..., padding[1] :, 0] = 0  # padding value inclusive on right of zeros
+        mask[ : int(padding[0]), 0] = 0
+        mask[ int(padding[1]) :, 0] = 0  # padding value inclusive on right of zeros
 
     masked_data = data * mask + 0.0  # the + 0.0 removes the sign of the zeros
 
@@ -410,3 +410,83 @@ class VarNetDataTransform:
             max_value,
             crop_size,
         )
+
+class VarNetMaxRowDataTransform:
+    """
+    Data Transformer for training VarNet models.
+    """
+
+    def __init__(self, mask_func: Optional[MaskFunc] = None, use_seed: bool = True):
+        """
+        Args:
+            mask_func: Optional; A function that can create a mask of
+                appropriate shape. Defaults to None.
+            use_seed: If True, this class computes a pseudo random number
+                generator seed from the filename. This ensures that the same
+                mask is used for all the slices of a given volume every time.
+        """
+        self.mask_func = mask_func
+        self.use_seed = use_seed
+
+    def __call__(
+            self,
+            kspace: np.ndarray,
+            mask: np.ndarray,
+            target: np.ndarray,
+            attrs: Dict,
+            fname: str,
+            slice_num: int,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, str, int, float, torch.Tensor]:
+        """
+        Args:
+            kspace: Input k-space of shape (num_coils, rows, cols) for
+                multi-coil data.
+            mask: Mask from the test dataset.
+            target: Target image.
+            attrs: Acquisition related information stored in the HDF5 object.
+            fname: File name.
+            slice_num: Serial number of the slice.
+        Returns:
+            tuple containing:
+                masked_kspace: k-space after applying sampling mask.
+                mask: The applied sampling mask
+                target: The target image (if applicable).
+                fname: File name.
+                slice_num: The slice index.
+                max_value: Maximum image value.
+                crop_size: The size to crop the final image.
+        """
+        if target is not None:
+            target = to_tensor(target)
+            max_value = attrs["max"]
+        else:
+            target = torch.tensor(0)
+            max_value = 0.0
+
+        kspace = to_tensor(kspace)
+        seed = None if not self.use_seed else tuple(map(ord, fname))
+        acq_start = attrs["padding_left"]
+        acq_end = attrs["padding_right"]
+
+        crop_size = torch.tensor([attrs["recon_size"][0], attrs["recon_size"][1]])
+
+        accelerations = 4
+        row_sums = torch.sum(kspace, -1)
+        mask = np.zeros(kspace.shape[-2], dtype=np.float32)
+        indexes = torch.topk(row_sums, int(kspace.shape[-2]/ accelerations))[1].numpy()
+        mask[indexes] = 1
+        mask = torch.from_numpy(mask.reshape(kspace.shape[-2], 1).astype(np.float32))
+        masked_kspace = kspace*mask
+
+
+        return (
+            masked_kspace,
+            mask.byte(),
+            target,
+            fname,
+            slice_num,
+            max_value,
+            crop_size,
+        )
+
+

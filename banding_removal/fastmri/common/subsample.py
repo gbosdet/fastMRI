@@ -80,9 +80,9 @@ class MaskFunc:
         """
         num_cols = shape[-2]
         mask = np.zeros(num_cols, dtype=np.float32)
-        pad = (num_cols - num_low_freqs + 1) // 2
-        mask[pad:pad + num_low_freqs] = 1
-        assert mask.sum() == num_low_freqs
+        pad = int((num_cols - num_low_freqs + 1) // 2)
+        mask[pad:num_cols-pad] = 1
+        #assert mask.sum() == int(num_low_freqs*num_cols)
         return mask
 
     def accel_mask(self, n, acceleration, offset, num_low_frequencies):
