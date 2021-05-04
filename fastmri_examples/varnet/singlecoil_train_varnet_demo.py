@@ -13,6 +13,8 @@ import pytorch_lightning as pl
 from fastmri.data.mri_data import fetch_dir
 from banding_removal.fastmri.common.subsample import mask_factory
 from fastmri.data.transforms import VarNetDataTransform
+from fastmri.data.transforms import VarNetMaxRowDataTransform, VarNetSmartChooseDataTransform
+
 from fastmri.pl_modules import FastMriDataModule
 # from fastmri.pl_modules import SSVarNetModule as VarNetModule
 from fastmri.pl_modules import VarNetModule
@@ -29,8 +31,8 @@ def cli_main(args):
         args.mask_type, args.center_fractions, args.accelerations
     )
     # use random masks for train transform, fixed masks for val transform
-    train_transform = VarNetDataTransform(mask_func=mask, use_seed=False)
-    val_transform = VarNetDataTransform(mask_func=mask)
+    train_transform = VarNetSmartChooseDataTransform(mask_func=mask, use_seed=False)
+    val_transform = VarNetSmartChooseDataTransform(mask_func=mask)
     test_transform = VarNetDataTransform()
     # ptl data module - this handles data loaders
     data_module = FastMriDataModule(
@@ -141,8 +143,8 @@ def build_args():
         pools=3,  # number of pooling layers for U-Net
         chans=8,  # number of top-level channels for U-Net
         lr=0.01,  # Adam learning rate
-        lr_step_size=2,  # epoch at which to decrease learning rate
-        lr_gamma=0.5,  # extent to which to decrease learning rate
+        lr_step_size=5,  # epoch at which to decrease learning rate
+        lr_gamma=0.1,  # extent to which to decrease learning rate
         weight_decay=0.0,  # weight regularization strength
     )
 
@@ -155,7 +157,7 @@ def build_args():
         seed=42,  # random seed
         deterministic=True,  # makes things slower, but deterministic
         default_root_dir=default_root_dir,  # directory for logs and checkpoints
-        max_epochs=10,  # max number of epochs
+        max_epochs=7,  # max number of epochs
     )
 
     args = parser.parse_args()
