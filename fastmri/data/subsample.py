@@ -202,6 +202,81 @@ class EquispacedMaskFunc(MaskFunc):
         return mask
 
 
+class OffsetMaskFunc(MaskFunc):
+    """
+    EquispacedMaskFunc creates a sub-sampling mask of a given shape.
+
+    The mask selects a subset of columns from the input k-space data. If the
+    k-space data has N columns, the mask picks out:
+        1. N_low_freqs = (N * center_fraction) columns in the center
+           corresponding tovlow-frequencies.
+        2. The other columns are selected with equal spacing at a proportion
+           that reaches the desired acceleration rate taking into consideration
+           the number of low frequencies. This ensures that the expected number
+           of columns selected is equal to (N / acceleration)
+
+    It is possible to use multiple center_fractions and accelerations, in which
+    case one possible (center_fraction, acceleration) is chosen uniformly at
+    random each time the EquispacedMaskFunc object is called.
+
+    Note that this function may not give equispaced samples (documented in
+    https://github.com/facebookresearch/fastMRI/issues/54), which will require
+    modifications to standard GRAPPA approaches. Nonetheless, this aspect of
+    the function has been preserved to match the public multicoil data.
+    """
+
+    def __call__(
+            self, shape: Sequence[int], seed: Optional[Union[int, Tuple[int, ...]]] = None
+    ) -> torch.Tensor:
+        """
+        Args:
+            shape: The shape of the mask to be created. The shape should have
+                at least 3 dimensions. Samples are drawn along the second last
+                dimension.
+            seed: Seed for the random number generator. Setting the seed
+                ensures the same mask is generated each time for the same
+                shape. The random state is reset afterwards.
+
+        Returns:
+            A mask of the specified shape.
+        """
+        if len(shape) < 3:
+            raise ValueError("Shape should have 3 or more dimensions")
+
+        with temp_seed(self.rng, seed):
+            center_fraction, acceleration = self.choose_acceleration()
+            num_cols = shape[-2]
+            num_low_freqs = int(round(num_cols * center_fraction))
+
+            # create the mask
+            mask = np.zeros(num_cols, dtype=np.float32)
+            pad = (num_cols - num_low_freqs + 1) // 2
+            mask[pad: pad + num_low_freqs] = True
+
+            # determine acceleration rate by adjusting for the number of low frequencies
+            adjusted_accel = (acceleration * (num_low_freqs - num_cols)) / (
+                    num_low_freqs * acceleration - num_cols
+            )
+            offset = 0
+
+            accel_samples_1 = np.arange(num_cols // 2, 0.5, -adjusted_accel)
+            accel_samples_1 = np.around(accel_samples_1).astype(np.uint)
+            mask[accel_samples_1] = True
+
+            offset = 1
+
+            accel_samples_2 = np.arange(num_cols//2 + offset, num_cols-1, adjusted_accel)
+            accel_samples_2 = np.around(accel_samples_2).astype(np.uint)
+            mask[accel_samples_2] = True
+
+            # reshape the mask
+            mask_shape = [1 for _ in shape]
+            mask_shape[-2] = num_cols
+            mask = torch.from_numpy(mask.reshape(*mask_shape).astype(np.float32))
+
+        return mask
+
+
 def create_mask_for_mask_type(
     mask_type_str: str,
     center_fractions: Sequence[float],
@@ -218,5 +293,7 @@ def create_mask_for_mask_type(
         return RandomMaskFunc(center_fractions, accelerations)
     elif mask_type_str == "equispaced":
         return EquispacedMaskFunc(center_fractions, accelerations)
+    elif mask_type_str == "offset":
+        return OffsetMaskFunc(center_fractions, accelerations)
     else:
         raise Exception(f"{mask_type_str} not supported")
